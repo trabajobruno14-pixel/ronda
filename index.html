@@ -93,28 +93,11 @@
   </div>
 
   <div id="view-pagos" class="view">
-    <div id="pagos-lock">
-      <div class="lock-wrap">
-        <div class="lock-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </div>
-        <div class="lock-title">Registro de pagos</div>
-        <div class="lock-sub">Ingresá la contraseña para registrar pagos</div>
-        <div class="lock-form">
-          <input type="password" id="pwd-pagos" placeholder="Contraseña" onkeydown="if(event.key==='Enter')chkPwdPagos()">
-          <button class="bs" onclick="chkPwdPagos()">Entrar</button>
-        </div>
-        <div class="err-msg" id="pwd-pagos-err"></div>
-      </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div class="sec-title" id="pagos-title" style="margin-bottom:0"></div>
     </div>
-    <div id="pagos-content" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-        <div class="sec-title" id="pagos-title" style="margin-bottom:0"></div>
-        <button class="bs" onclick="lockPagos()" style="font-size:11px;padding:4px 9px">Cerrar</button>
-      </div>
-      <div id="lista-pagos"></div>
-      <div style="margin-top:8px;font-size:12px;color:#888">Tocá cada tarjeta para cambiar el estado</div>
-    </div>
+    <div id="lista-pagos"></div>
+    <div style="margin-top:8px;font-size:12px;color:#888">Para registrar pagos ingresá al Panel de administración</div>
   </div>
 
   <div id="view-panel" class="view">
@@ -138,7 +121,10 @@
         <button class="bs" onclick="lockPanel()">Cerrar sesión</button>
       </div>
       <div class="pc">
-        <div class="pc-title">Participantes y orden</div>
+        <div class="pc-title">Registrar pagos — semana actual</div>
+        <div id="panel-lista-pagos"></div>
+      </div>
+      <div class="pc">
         <div id="edit-personas"></div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <input type="text" id="nuevo-nombre" placeholder="Nombre nuevo...">
@@ -352,13 +338,32 @@ function render(){
         <span class="badge b-act">Cobra</span></div>`;
     } else {
       const pg=pagosS[p]===true;
-      phtml+=`<div class="card" onclick="togglePago('${p}')">
+      phtml+=`<div class="card">
         <div class="av" style="background:${col.bg};color:${col.fg}">${p.substring(0,2).toUpperCase()}</div>
         <div class="inf"><div class="nm">${p}</div><div class="sb">Cuota ₲${fmtNum(state.monto)}</div></div>
         <span class="badge ${pg?'b-ok':'b-debe'}">${pg?'Pagado':'Debe'}</span></div>`;
     }
   });
   document.getElementById('lista-pagos').innerHTML = phtml;
+
+  let pphtml='';
+  state.personas.forEach((p,i)=>{
+    const col=COLORS[i%COLORS.length];
+    const esC=i===s-1;
+    if(esC){
+      pphtml+=`<div class="card hl">
+        <div class="av" style="background:${col.bg};color:${col.fg}">${p.substring(0,2).toUpperCase()}</div>
+        <div class="inf"><div class="nm">${p}</div><div class="sb">Cobra esta semana · ₲${fmtNum(pozo)}</div></div>
+        <span class="badge b-act">Cobra</span></div>`;
+    } else {
+      const pg=pagosS[p]===true;
+      pphtml+=`<div class="card" onclick="togglePago('${p}')">
+        <div class="av" style="background:${col.bg};color:${col.fg}">${p.substring(0,2).toUpperCase()}</div>
+        <div class="inf"><div class="nm">${p}</div><div class="sb">Cuota ₲${fmtNum(state.monto)}</div></div>
+        <span class="badge ${pg?'b-ok':'b-debe'}">${pg?'Pagado':'Debe'}</span></div>`;
+    }
+  });
+  if(document.getElementById('panel-lista-pagos')) document.getElementById('panel-lista-pagos').innerHTML = pphtml;
 
   let ehtml='';
   state.personas.forEach((p,i)=>{
@@ -391,27 +396,7 @@ function goTab(id,btn){
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.getElementById('view-'+id).classList.add('on');
   btn.classList.add('on');
-  if(id==='pagos') lockPagos();
   if(id==='panel') lockPanel();
-}
-
-function chkPwdPagos(){
-  const v=document.getElementById('pwd-pagos').value;
-  if(v===PASS){
-    document.getElementById('pagos-lock').style.display='none';
-    document.getElementById('pagos-content').style.display='block';
-    render();
-  } else {
-    document.getElementById('pwd-pagos-err').textContent='Contrasena incorrecta';
-    document.getElementById('pwd-pagos').value='';
-  }
-}
-
-function lockPagos(){
-  document.getElementById('pagos-lock').style.display='block';
-  document.getElementById('pagos-content').style.display='none';
-  document.getElementById('pwd-pagos').value='';
-  document.getElementById('pwd-pagos-err').textContent='';
 }
 
 function chkPwd(){
