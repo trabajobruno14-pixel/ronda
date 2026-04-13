@@ -192,7 +192,8 @@ const estadoInicial = {
 };
 
 let state = null;
-let binId = localStorage.getItem('ronda-bin-id') || null;
+const BIN_ID_FIJO = '69dd21c836566621a8ac134a';
+let binId = BIN_ID_FIJO;
 let syncTimer = null;
 
 function setSyncBar(tipo, msg){
@@ -204,23 +205,11 @@ function setSyncBar(tipo, msg){
 async function cargarDatos(){
   setSyncBar('loading','Sincronizando...');
   try {
-    if(!binId){
-      const r = await fetch(JSONBIN_URL, {
-        method:'POST',
-        headers:{'Content-Type':'application/json','X-Master-Key':API_KEY,'X-Bin-Name':'ronda-equipo','X-Bin-Private':'false'},
-        body: JSON.stringify(estadoInicial)
-      });
-      const d = await r.json();
-      binId = d.metadata.id;
-      localStorage.setItem('ronda-bin-id', binId);
-      state = estadoInicial;
-    } else {
-      const r = await fetch(`${JSONBIN_URL}/${binId}/latest`, {
-        headers:{'X-Master-Key':API_KEY}
-      });
-      const d = await r.json();
-      state = d.record;
-    }
+    const r = await fetch(`${JSONBIN_URL}/${binId}/latest`, {
+      headers:{'X-Master-Key':API_KEY}
+    });
+    const d = await r.json();
+    state = d.record;
     setSyncBar('ok','Sincronizado');
     render();
     iniciarAutoSync();
