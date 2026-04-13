@@ -56,17 +56,22 @@
   .confirm-box{background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:1.25rem;max-width:300px;width:100%;text-align:center}
   h1{font-size:18px;font-weight:500;color:#1a1a1a}
   .header-badge{font-size:12px;color:#888;background:#f0f0ee;padding:5px 10px;border-radius:8px}
+  .sync-bar{font-size:11px;padding:5px 12px;border-radius:6px;margin-bottom:12px;text-align:center}
+  .sync-ok{background:#EAF3DE;color:#27500A}
+  .sync-loading{background:#FAEEDA;color:#633806}
+  .sync-err{background:#FCEBEB;color:#791F1F}
 </style>
 </head>
 <body>
 <div class="rw">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
     <div>
       <h1>Ronda del equipo</h1>
-      <div style="font-size:12px;color:#888;margin-top:2px">7 personas · ₲ 50.000 / semana</div>
+      <div style="font-size:12px;color:#888;margin-top:2px" id="sub-info">7 personas · ₲ 50.000 / semana</div>
     </div>
     <div id="semana-badge" class="header-badge"></div>
   </div>
+  <div id="sync-bar" class="sync-bar sync-loading">Conectando...</div>
 
   <div class="nav">
     <button class="nb on" onclick="goTab('inicio',this)">Inicio</button>
@@ -88,9 +93,28 @@
   </div>
 
   <div id="view-pagos" class="view">
-    <div class="sec-title" id="pagos-title"></div>
-    <div id="lista-pagos"></div>
-    <div style="margin-top:8px;font-size:12px;color:#888">Tocá cada tarjeta para cambiar el estado</div>
+    <div id="pagos-lock">
+      <div class="lock-wrap">
+        <div class="lock-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div class="lock-title">Registro de pagos</div>
+        <div class="lock-sub">Ingresá la contraseña para registrar pagos</div>
+        <div class="lock-form">
+          <input type="password" id="pwd-pagos" placeholder="Contraseña" onkeydown="if(event.key==='Enter')chkPwdPagos()">
+          <button class="bs" onclick="chkPwdPagos()">Entrar</button>
+        </div>
+        <div class="err-msg" id="pwd-pagos-err"></div>
+      </div>
+    </div>
+    <div id="pagos-content" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div class="sec-title" id="pagos-title" style="margin-bottom:0"></div>
+        <button class="bs" onclick="lockPagos()" style="font-size:11px;padding:4px 9px">Cerrar</button>
+      </div>
+      <div id="lista-pagos"></div>
+      <div style="margin-top:8px;font-size:12px;color:#888">Tocá cada tarjeta para cambiar el estado</div>
+    </div>
   </div>
 
   <div id="view-panel" class="view">
@@ -154,6 +178,9 @@
 
 <script>
 const PASS = 'ronda2025';
+const API_KEY = '$2a$10$9PfnXEW7csTwh3dATFquq.ecl8xmPTymxUYU/kn2XKmAv3x0X.hGO';
+const JSONBIN_URL = 'https://api.jsonbin.io/v3/b';
+
 const COLORS = [
   {bg:'#E1F5EE',fg:'#085041'},{bg:'#EEEDFE',fg:'#3C3489'},{bg:'#FBEAF0',fg:'#72243E'},
   {bg:'#E6F1FB',fg:'#0C447C'},{bg:'#FAEEDA',fg:'#633806'},{bg:'#EAF3DE',fg:'#27500A'},
@@ -169,7 +196,7 @@ function shuffle(arr){
 const restantes = shuffle(['Bruno','Yeni','Maria','Evelio']);
 const ordenInicial = ['Felipe','Zulma','Adrian',...restantes];
 
-let state = JSON.parse(localStorage.getItem('ronda-state') || 'null') || {
+const estadoInicial = {
   personas: ordenInicial,
   semanaActual: 2,
   fechaInicio: '2026-04-11',
@@ -178,7 +205,75 @@ let state = JSON.parse(localStorage.getItem('ronda-state') || 'null') || {
   cobradas: [0]
 };
 
-function save(){ localStorage.setItem('ronda-state', JSON.stringify(state)); }
+let state = null;
+let binId = localStorage.getItem('ronda-bin-id') || null;
+let syncTimer = null;
+
+function setSyncBar(tipo, msg){
+  const b = document.getElementById('sync-bar');
+  b.className = 'sync-bar sync-'+tipo;
+  b.textContent = msg;
+}
+
+async function cargarDatos(){
+  setSyncBar('loading','Sincronizando...');
+  try {
+    if(!binId){
+      const r = await fetch(JSONBIN_URL, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Master-Key':API_KEY,'X-Bin-Name':'ronda-equipo','X-Bin-Private':'false'},
+        body: JSON.stringify(estadoInicial)
+      });
+      const d = await r.json();
+      binId = d.metadata.id;
+      localStorage.setItem('ronda-bin-id', binId);
+      state = estadoInicial;
+    } else {
+      const r = await fetch(`${JSONBIN_URL}/${binId}/latest`, {
+        headers:{'X-Master-Key':API_KEY}
+      });
+      const d = await r.json();
+      state = d.record;
+    }
+    setSyncBar('ok','Sincronizado');
+    render();
+    iniciarAutoSync();
+  } catch(e){
+    setSyncBar('err','Sin conexion — usando datos locales');
+    state = JSON.parse(localStorage.getItem('ronda-backup')) || estadoInicial;
+    render();
+    setTimeout(cargarDatos, 8000);
+  }
+}
+
+async function guardarDatos(){
+  if(!binId || !state) return;
+  setSyncBar('loading','Guardando...');
+  try {
+    localStorage.setItem('ronda-backup', JSON.stringify(state));
+    await fetch(`${JSONBIN_URL}/${binId}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},
+      body: JSON.stringify(state)
+    });
+    setSyncBar('ok','Guardado y sincronizado');
+  } catch(e){
+    setSyncBar('err','Error al guardar');
+  }
+}
+
+function iniciarAutoSync(){
+  if(syncTimer) clearInterval(syncTimer);
+  syncTimer = setInterval(async ()=>{
+    try {
+      const r = await fetch(`${JSONBIN_URL}/${binId}/latest`,{headers:{'X-Master-Key':API_KEY}});
+      const d = await r.json();
+      state = d.record;
+      render();
+      setSyncBar('ok','Sincronizado');
+    } catch(e){}
+  }, 10000);
+}
 
 function getSemanaFecha(n){
   const d = new Date(state.fechaInicio);
@@ -198,6 +293,7 @@ function initPagos(){
 }
 
 function render(){
+  if(!state) return;
   initPagos();
   const s = state.semanaActual;
   const cobrador = state.personas[s-1];
@@ -206,6 +302,7 @@ function render(){
   const pagaron = Object.values(pagosS).filter(Boolean).length;
   const pozo = state.monto * state.personas.length;
 
+  document.getElementById('sub-info').textContent = `${state.personas.length} personas · ₲ ${fmtNum(state.monto)} / semana`;
   document.getElementById('semana-badge').textContent = `Semana ${s} / ${state.personas.length}`;
   document.getElementById('s-pozo').textContent = '₲'+fmtNum(pozo);
   document.getElementById('s-cobrado').textContent = pagaron+' / '+totalPagan;
@@ -232,7 +329,7 @@ function render(){
     let badge,dim=false;
     if(esActual) badge=`<span class="badge b-act">Activo</span>`;
     else if(cobrado){badge=`<span class="badge b-ok">Cobrado</span>`;dim=true;}
-    else if(esSig) badge=`<span class="badge b-prox">Próximo</span>`;
+    else if(esSig) badge=`<span class="badge b-prox">Proximo</span>`;
     else badge=`<span class="badge b-pend">Pendiente</span>`;
     html+=`<div class="card${esActual?' hl':''}${dim?' dim':''}">
       <div class="av" style="background:${col.bg};color:${col.fg}">${p.substring(0,2).toUpperCase()}</div>
@@ -271,7 +368,7 @@ function render(){
       <div style="font-size:12px;color:#888;width:20px;text-align:right;flex-shrink:0">${i+1}</div>
       <div class="av" style="background:${col.bg};color:${col.fg};width:28px;height:28px;font-size:11px;flex-shrink:0">${p.substring(0,2).toUpperCase()}</div>
       <input type="text" value="${p}" onchange="editarNombre(${i},this.value)" style="flex:1">
-      ${cobrado?'<span style="font-size:11px;color:#27500A">Ya cobró</span>':''}
+      ${cobrado?'<span style="font-size:11px;color:#27500A">Ya cobro</span>':''}
       ${!cobrado&&i>0?`<button class="bs" onclick="subirTurno(${i})">Subir</button>`:''}
       ${!cobrado?`<button class="bs bd" onclick="quitarPersona(${i})">Quitar</button>`:''}
     </div>`;
@@ -281,11 +378,12 @@ function render(){
   document.getElementById('cfg-inicio').value = state.fechaInicio;
 }
 
-function togglePago(nombre){
+async function togglePago(nombre){
   const s=state.semanaActual;
   if(!state.pagos[s]) state.pagos[s]={};
   state.pagos[s][nombre]=!state.pagos[s][nombre];
-  save(); render();
+  render();
+  await guardarDatos();
 }
 
 function goTab(id,btn){
@@ -293,6 +391,27 @@ function goTab(id,btn){
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.getElementById('view-'+id).classList.add('on');
   btn.classList.add('on');
+  if(id==='pagos') lockPagos();
+  if(id==='panel') lockPanel();
+}
+
+function chkPwdPagos(){
+  const v=document.getElementById('pwd-pagos').value;
+  if(v===PASS){
+    document.getElementById('pagos-lock').style.display='none';
+    document.getElementById('pagos-content').style.display='block';
+    render();
+  } else {
+    document.getElementById('pwd-pagos-err').textContent='Contrasena incorrecta';
+    document.getElementById('pwd-pagos').value='';
+  }
+}
+
+function lockPagos(){
+  document.getElementById('pagos-lock').style.display='block';
+  document.getElementById('pagos-content').style.display='none';
+  document.getElementById('pwd-pagos').value='';
+  document.getElementById('pwd-pagos-err').textContent='';
 }
 
 function chkPwd(){
@@ -302,7 +421,7 @@ function chkPwd(){
     document.getElementById('panel-content').style.display='block';
     render();
   } else {
-    document.getElementById('pwd-err').textContent='Contraseña incorrecta';
+    document.getElementById('pwd-err').textContent='Contrasena incorrecta';
     document.getElementById('pwd-input').value='';
   }
 }
@@ -314,57 +433,63 @@ function lockPanel(){
   document.getElementById('pwd-err').textContent='';
 }
 
-function agregarPersona(){
+async function agregarPersona(){
   const inp=document.getElementById('nuevo-nombre');
   const n=inp.value.trim();
   if(!n) return;
   state.personas.push(n);
   inp.value='';
-  save(); render();
+  render();
+  await guardarDatos();
 }
 
-function quitarPersona(i){
+async function quitarPersona(i){
   if(state.cobradas.includes(i)) return;
-  if(!confirm('¿Quitar a '+state.personas[i]+'?')) return;
+  if(!confirm('Quitar a '+state.personas[i]+'?')) return;
   state.personas.splice(i,1);
-  save(); render();
+  render();
+  await guardarDatos();
 }
 
-function editarNombre(i,v){
+async function editarNombre(i,v){
   state.personas[i]=v.trim()||state.personas[i];
-  save();
+  await guardarDatos();
 }
 
-function subirTurno(i){
+async function subirTurno(i){
   if(i<=0) return;
   [state.personas[i-1],state.personas[i]]=[state.personas[i],state.personas[i-1]];
-  save(); render();
+  render();
+  await guardarDatos();
 }
 
-function guardarConfig(){
+async function guardarConfig(){
   const m=parseInt(document.getElementById('cfg-monto').value.replace(/\D/g,''));
   const fi=document.getElementById('cfg-inicio').value.trim();
   if(m>0) state.monto=m;
   if(fi) state.fechaInicio=fi;
-  save(); render();
+  render();
+  await guardarDatos();
 }
 
-function avanzarSemana(){
-  if(state.semanaActual>=state.personas.length){alert('¡Ronda completada!');return;}
+async function avanzarSemana(){
+  if(state.semanaActual>=state.personas.length){alert('Ronda completada!');return;}
   state.cobradas.push(state.semanaActual-1);
   state.semanaActual++;
-  save(); render();
+  render();
+  await guardarDatos();
 }
 
-function confirmarReinicio(){
+async function confirmarReinicio(){
   state.semanaActual=1;
   state.pagos={};
   state.cobradas=[];
   document.getElementById('confirm-reinicio-wrap').style.display='none';
-  save(); render();
+  render();
+  await guardarDatos();
 }
 
-render();
+cargarDatos();
 </script>
 </body>
 </html>
